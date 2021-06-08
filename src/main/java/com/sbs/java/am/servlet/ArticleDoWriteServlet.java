@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Map;
 
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
@@ -25,12 +26,6 @@ public class ArticleDoWriteServlet extends HttpServlet {
 		request.setCharacterEncoding("UTF-8");
 		response.setContentType("text/html; charset=UTF-8");
 		
-		HttpSession session = request.getSession();
-		if(session.getAttribute("loginedMemberId") == null) {
-			response.getWriter().append(
-					String.format("<script> alert('로그인 후 이용해주세요.'); location.replace('../member/login'); </script>"));
-		}
-
 		// 커넥터 드라이버 활성화
 		String driverName = Config.getDBDriverClassName();
 
@@ -47,20 +42,35 @@ public class ArticleDoWriteServlet extends HttpServlet {
 
 		try {
 			con = DriverManager.getConnection(Config.getDBUrl(), Config.getDBId(), Config.getDBPw());
-			String title = request.getParameter("title");
-			String body = request.getParameter("body");
 			
-			int loginedMemberId = (int)session.getAttribute("loginedMemberId");
+			HttpSession session = request.getSession();
+			
+			boolean isLogined = false;
+			int loginedMemberId = -1;
+			Map<String, Object> loginedMemberRow = null;
+			
+			if ( session.getAttribute("loginedMemberId") != null ) {
+				loginedMemberId = (int)session.getAttribute("loginedMemberId");
+				isLogined = true;
+				
+				SecSql sql = SecSql.from("SELECT * FROM member");
+				sql.append("WHERE id = ?", loginedMemberId);
+				loginedMemberRow = DBUtil.selectRow(con, sql);
+			}
+			
+			request.setAttribute("isLogined", isLogined);
+			request.setAttribute("loginedMemberId", loginedMemberId);
+			request.setAttribute("loginedMemberRow", loginedMemberRow);
+			
+			int id = Integer.parseInt(request.getParameter("id"));
 
-			SecSql sql = SecSql.from("INSERT INTO article");
-			sql.append("SET regDate = NOW()");
-			sql.append(", title = ?", title);
-			sql.append(", body = ?", body);
-			sql.append(", memberId = ?", loginedMemberId);
+			SecSql sql = SecSql.from("SELECT *");
+			sql.append("FROM article");
+			sql.append("WHERE id = ?", id);
 
-			int id = DBUtil.insert(con, sql);
-			response.getWriter().append(
-					String.format("<script> alert('%d번 글이 생성되었습니다.'); location.replace('list'); </script>", id));
+			Map<String, Object> articleRow = DBUtil.selectRow(con, sql);
+			request.setAttribute("articleRow", articleRow);
+			request.getRequestDispatcher("/jsp/article/detail.jsp").forward(request, response);
 		} catch (SQLException e) {
 			e.printStackTrace();
 		} catch(SQLErrorException e) {
